@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:jms="http://www.mulesoft.org/schema/mule/jms" xmlns:amqp="http://www.mulesoft.org/schema/mule/amqp"
+ xmlns:json="http://www.mulesoft.org/schema/mule/json"
+ xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:tls="http://www.mulesoft.org/schema/mule/tls" xmlns:email="http://www.mulesoft.org/schema/mule/email" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd
+http://www.mulesoft.org/schema/mule/json http://www.mulesoft.org/schema/mule/json/current/mule-json.xsd
+http://www.mulesoft.org/schema/mule/amqp http://www.mulesoft.org/schema/mule/amqp/current/mule-amqp.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd">
+ <http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="745db78d-3378-4d36-88e1-ef6af6bc055b" >
+  <http:listener-connection host="0.0.0.0" port="8081" />
+ </http:listener-config>
+ <salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="652fb94a-ed38-47e2-a6f2-f97a2b90964f" >
+  <salesforce:basic-connection username="shraddhaagrawal563.33f01c56046d@agentforce.com" password="salesforce123" securityToken="hJgXh18FPyRdp2h2RtD9hwCZ">
+   <reconnection >
+    <reconnect />
+   </reconnection>
+  </salesforce:basic-connection>
+ </salesforce:sfdc-config>
+ <email:smtp-config name="Email_SMTP" doc:name="Email SMTP" doc:id="1f5e25ac-3afb-4858-87c9-6abe5a6d316d" >
+  <email:smtps-connection host="smtp.gmail.com" user="shraddhaagrawal480@gmail.com" password="yiwggbqykiqpkopo" >
+   <tls:context >
+    <tls:trust-store insecure="true" />
+   </tls:context>
+  </email:smtps-connection>
+ </email:smtp-config>
+ <os:object-store name="Object_store" doc:name="Object store" doc:id="8e575651-0063-49b0-8641-13bfbd7b3703" />
+ <amqp:config name="AMQP_Config" doc:name="AMQP Config" doc:id="74d89060-bc2d-4fd4-a4ab-a11cd92fb15d" contentType="application/json">
+  <amqp:connection host="leopard-01.lmq.cloudamqp.com" port="5672" virtualHost="prlmprsp" username="prlmprsp" password="ZlnuG95uZdqH_guA8qdcrFIFbWz2_uTh" />
+  <amqp:consumer-config ackMode="MANUAL" numberOfConsumers="1"/>
+  <amqp:publisher-config mandatory="true" />
+  <amqp:quality-of-service-config prefetchCount="1" />
+ </amqp:config>
+ <flow name="abc-sa-sf-customer-notification-apiFlow" doc:id="7b89bcc9-7dc7-4cb1-80be-00ea213924d5" >
+  <http:listener doc:name="Listener" doc:id="9ee49601-d762-4767-bbbe-6a0dee040566" config-ref="HTTP_Listener_config" path="/customer-notification"/>
+  <logger level="INFO" doc:name="Logger" doc:id="27f7dafc-0747-43cd-9a86-41755c7cdd48" message='#["flow started"]'/>
+  <os:retrieve doc:name="Retrieve" doc:id="1b895ced-54f5-4e55-a65e-c11e40288e85" key="time_watermark" objectStore="Object_store" target="lastRunTime">
+   <os:default-value ><![CDATA[#[(now() - |PT30M|) >> "UTC"]]]></os:default-value>
+  </os:retrieve>
+  <logger level="INFO" doc:name="Logger" doc:id="4430be96-3d73-4209-8a20-35f0d43fcf0e" message='#["watermark retrieve" ++  vars.lastRunTime]'/>
+  <salesforce:query doc:name="Query" doc:id="1524e67f-9361-4a86-aa40-48a29c3ac9e9" config-ref="Salesforce_Config">
+   <salesforce:salesforce-query ><![CDATA[SELECT FIELDS(STANDARD)
+FROM Contact 
+ORDER BY SystemModstamp ASC LIMIT 1]]></salesforce:salesforce-query>
+   <salesforce:parameters ><![CDATA[#[output application/java
+---
+{
+ "watermark" : vars.lastRunTime
+}]]]></salesforce:parameters>
+  </salesforce:query>
+  <ee:transform doc:name="Transform Message" doc:id="65637e63-320d-48ce-96fb-5fb8c8a2b986">
+   <ee:message>
+    <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+   </ee:message>
+  </ee:transform>
+  <logger level="INFO" doc:name="Logger" doc:id="7df41776-2a45-454c-880c-9b3a5ea3114d" message="#[payload]"/>
+  <foreach doc:name="For Each" doc:id="3b7a2d52-cef7-42ff-b04f-12d31a94d4f6" collection="#[payload]">
+   <json:validate-schema doc:name="Validate schema" doc:id="9f110d00-49fc-4103-a95f-d415e41b0964" schema="schemas/contact-validation-schema.json"/>
+   <amqp:publish doc:name="Publish" doc:id="8a84c013-7b9d-45f8-b85c-0ee8dcfe3d86" config-ref="AMQP_Config" mandatory="true" exchangeName="sf.contact.exchange" requestBrokerConfirms="true" deliveryMode="PERSISTENT">
+    <reconnect />
+    <amqp:fallback-exchange-definition />
+    <amqp:routing-keys >
+     <amqp:routing-key value="contact.sync" />
+    </amqp:routing-keys>
+    <amqp:message >
+     <amqp:properties contentType="application/json" appId="SfCustomerNotification" />
+    </amqp:message>
+   </amqp:publish>
+   <logger level="INFO" doc:name="Logger" doc:id="0e7da78f-acb3-4046-b692-dda6fe1b1871" message='#[payload]'/>
+  </foreach>
+  <os:store doc:name="Store" doc:id="6f21b22a-b84a-4f55-acb0-e548af0d40be" key="time_watermark" objectStore="Object_store">
+   <os:value ><![CDATA[#[max(payload.SystemModstamp) default (now() >> "UTC")]]]></os:value>
+  </os:store>
+  <logger level="INFO" doc:name="Logger" doc:id="db6528ba-8ec1-4ba8-80a6-6da382394851" message='#["object store " ++ (max(payload.SystemModstamp) default (now() &gt;&gt; "UTC"))]'/>
+  <logger level="INFO" doc:name="Logger" doc:id="9a931e65-8050-4c2c-b84c-142156a19f8e" message='#["flow ended"]'/>
+ </flow>
+ <flow name="abc-sa-sf-customer-notification-apiFlow1" doc:id="b79c8bbd-b90c-4b1b-bd9a-e71bce846b1a" >
+  <scheduler doc:name="Scheduler" doc:id="fc88e514-6c1d-4438-a583-cd9b42c2e90b" >
+   <scheduling-strategy >
+    <fixed-frequency frequency="1" timeUnit="SECONDS"/>
+   </scheduling-strategy>
+  </scheduler>
+  <http:listener doc:name="Listener" doc:id="3ec93dee-3d69-46af-acc3-cb6ff4c835d8" config-ref="HTTP_Listener_config" path="/trigger-consume"/>
+  <foreach doc:name="For Each" doc:id="0c0bd862-a42e-424c-a39e-e5d17d94e321" collection="#[1 to 2]">
+   <try doc:name="Try" doc:id="bf1a9268-15ad-464b-be5c-330132a2ea5f" >
+    <amqp:consume doc:name="Consume" doc:id="1e3c28b5-652c-41a5-b663-2cfea7d4bc23" config-ref="AMQP_Config" queueName="sf.contact.queue" ackMode="MANUAL" maximumWait="100" contentType="application/json" >
+     <reconnect />
+    </amqp:consume>
+    <logger level="INFO" doc:name="Logger" doc:id="acc2758f-e2e6-4590-b784-ce20c8e7e02d" message="#[payload]"/>
+    <error-handler >
+     <on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="ce38351c-ee51-4206-99e3-4f80c591fa3a" type="AMQP:TIMEOUT">
+      <logger level="INFO" doc:name="its ok chill" doc:id="d189fc0f-2fc9-41f5-8443-e4e507c4df39" message='#["its ok to get timeout as no contact update might have happened"]'/>
+      <set-payload value="#[%dw 2.0&#10;output application/java&#10;---&#10;null]" doc:name="Set empty Payload" doc:id="10bb4de7-a3a6-43aa-8756-a2b81ae335fc" />
+     </on-error-continue>
+    </error-handler>
+   </try>
+   <choice doc:name="Choice" doc:id="96ca4cf4-9089-4771-a97e-179f2f329643">
+      <when expression="#[payload != null and !isEmpty(payload.Email)]">
+       <email:send doc:name="Send" doc:id="aa8ffaa9-0e16-4839-b89a-7b00236cb6ad" config-ref="Email_SMTP" fromAddress="noreply@abctravel.com" subject="ABC Travel Notifications">
+    <email:to-addresses >
+     <email:to-address value="#[payload.Email]" />
+    </email:to-addresses>
+  </email:send>
+       <amqp:ack doc:name="Ack" doc:id="fd1e69b3-d610-4922-abd4-ad3c911c5dd9" ackId="#[attributes.ackId]"/>
+      </when>
+    <otherwise>
+     <logger level="INFO" doc:name="No updates in contact" doc:id="680b0bd4-4721-4fc4-8b63-57e1e5787161" message='#["No updates in contact/poisonous msgs without email (in case some other system pushes msg to this queue)"]' />
+      </otherwise>
+     </choice>
+  </foreach>
+ </flow>
+</mule>
